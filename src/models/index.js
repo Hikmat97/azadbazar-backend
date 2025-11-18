@@ -1,9 +1,13 @@
+
 const User = require('./User');
 const Category = require('./Category');
 const Listing = require('./Listing');
 const Favorite = require('./Favorite');
 const Conversation = require('./Conversation');
 const Message = require('./Message');
+const PushToken = require('./PushToken');
+
+
 
 // User <-> Listings
 User.hasMany(Listing, {
@@ -27,18 +31,42 @@ Listing.belongsTo(Category, {
   as: 'category'
 });
 
-// User <-> Favorites <-> Listings
+// User <-> Favorites <-> Listings (IMPORTANT!)
 User.belongsToMany(Listing, {
   through: Favorite,
   as: 'favoriteListings',
-  foreignKey: 'userId'
+  foreignKey: 'userId',
+  otherKey: 'listingId'
 });
 
 Listing.belongsToMany(User, {
   through: Favorite,
   as: 'favoritedBy',
-  foreignKey: 'listingId'
+  foreignKey: 'listingId',
+  otherKey: 'userId'
 });
+
+// Add direct associations for easier querying
+Favorite.belongsTo(Listing, {
+  foreignKey: 'listingId',
+  as: 'listing'
+});
+
+Favorite.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
+Listing.hasMany(Favorite, {
+  foreignKey: 'listingId',
+  as: 'favorites'
+});
+
+User.hasMany(Favorite, {
+  foreignKey: 'userId',
+  as: 'favorites'
+});
+
 
 // Conversations
 Conversation.belongsTo(User, {
@@ -77,11 +105,22 @@ Conversation.hasMany(Message, {
   as: 'messages'
 });
 
+User.hasMany(PushToken, {
+  foreignKey: 'userId',
+  as: 'pushTokens'
+});
+
+PushToken.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
 module.exports = {
   User,
   Category,
   Listing,
   Favorite,
   Conversation,
-  Message
+  Message,
+  PushToken
 };

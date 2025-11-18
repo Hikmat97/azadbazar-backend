@@ -1,5 +1,7 @@
 const { Listing, User, Category, Favorite } = require('../models');
 const { Op } = require('sequelize');
+const { sendNotification } = require('./notificationController');
+const { NOTIFICATION_TYPES } = require('../utils/notificationTypes');
 
 // Get all listings
 const getListings = async (req, res) => {
@@ -75,9 +77,11 @@ const getListings = async (req, res) => {
 };
 
 // Get listing by ID
+// Get listing by ID
 const getListingById = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id; // Get user ID if logged in
     
     const listing = await Listing.findByPk(id, {
       include: [
@@ -101,9 +105,21 @@ const getListingById = async (req, res) => {
     // Increment views
     await listing.increment('views');
 
+    // Check if user has favorited this listing
+    let isFavorite = false;
+    if (userId) {
+      const favorite = await Favorite.findOne({
+        where: { userId, listingId: id }
+      });
+      isFavorite = !!favorite;
+    }
+
     res.json({
       success: true,
-      listing
+      listing: {
+        ...listing.toJSON(),
+        isFavorite
+      }
     });
   } catch (error) {
     console.error('Get listing error:', error);
@@ -214,11 +230,23 @@ const toggleFavorite = async (req, res) => {
     const userId = req.user.id;
     const { listingId } = req.params;
 
+    // Get listing info
+    const listing = await Listing.findByPk(listingId, {
+      include: [
+        { model: User, as: 'seller', attributes: ['id', 'fullName'] }
+      ]
+    });
+
+    if (!listing) {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+
     const existing = await Favorite.findOne({
       where: { userId, listingId }
     });
 
     if (existing) {
+      // Remove from favorites
       await existing.destroy();
       res.json({
         success: true,
@@ -226,7 +254,22 @@ const toggleFavorite = async (req, res) => {
         isFavorite: false
       });
     } else {
+      // Add to favorites
       await Favorite.create({ userId, listingId });
+
+      // 🆕 Send notification to listing owner
+      if (listing.userId !== userId) {
+        const user = await User.findByPk(userId, {
+          attributes: ['fullName']
+        });
+
+        await sendNotification(listing.userId, NOTIFICATION_TYPES.LISTING_FAVORITED, {
+          userName: user.fullName,
+          listingTitle: listing.title,
+          listingId: listing.id
+        });
+      }
+
       res.json({
         success: true,
         message: 'Added to favorites',
@@ -240,15 +283,20 @@ const toggleFavorite = async (req, res) => {
 };
 
 // Get user's favorites
+// Get user's favorites
 const getFavorites = async (req, res) => {
   try {
     const userId = req.user.id;
+
+    console.log('📋 Fetching favorites for user:', userId);
 
     const favorites = await Favorite.findAll({
       where: { userId },
       include: [{
         model: Listing,
         as: 'listing',
+        where: { status: 'active' }, // Only show active listings
+        required: false, // Use LEFT JOIN to include favorites even if listing is deleted
         include: [
           {
             model: User,
@@ -265,12 +313,22 @@ const getFavorites = async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
+    console.log('✅ Found favorites:', favorites.length);
+
+    // Map to extract listings and add isFavorite flag
+    const favoritedListings = favorites
+      .filter(f => f.listing) // Filter out favorites where listing is null
+      .map(f => ({
+        ...f.listing.toJSON(),
+        isFavorite: true
+      }));
+
     res.json({
       success: true,
-      favorites: favorites.map(f => f.listing)
+      favorites: favoritedListings
     });
   } catch (error) {
-    console.error('Get favorites error:', error);
+    console.error('❌ Get favorites error:', error);
     res.status(500).json({ error: 'Failed to fetch favorites' });
   }
 };
@@ -393,6 +451,12 @@ const markAsSold = async (req, res) => {
 
     await listing.update({ status: 'sold' });
 
+    // 🆕 Send notification to user
+    await sendNotification(userId, NOTIFICATION_TYPES.LISTING_SOLD, {
+      listingTitle: listing.title,
+      listingId: listing.id
+    });
+
     res.json({
       success: true,
       message: 'Listing marked as sold'
@@ -402,6 +466,8 @@ const markAsSold = async (req, res) => {
     res.status(500).json({ error: 'Failed to mark as sold' });
   }
 };
+
+
 
 module.exports = {
   getListings,

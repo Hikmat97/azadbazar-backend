@@ -19,7 +19,7 @@ app.use(morgan('dev'));
 // Health check
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'OLX Clone API',
+    message: 'azdbzr API',
     status: 'running',
     timestamp: new Date()
   });
@@ -30,11 +30,13 @@ const authRoutes = require('./routes/authRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const listingRoutes = require('./routes/listingRoutes');
 const chatRoutes = require('./routes/chatRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/listings', listingRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

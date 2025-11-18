@@ -1,5 +1,7 @@
 const { Conversation, Message, User, Listing } = require('../models');
 const { Op } = require('sequelize');
+const { sendNotification } = require('./notificationController');
+const { NOTIFICATION_TYPES } = require('../utils/notificationTypes');
 
 // Get or create conversation
 const getOrCreateConversation = async (req, res) => {
@@ -11,40 +13,23 @@ const getOrCreateConversation = async (req, res) => {
       return res.status(400).json({ error: 'Cannot chat with yourself' });
     }
 
-    // Check if listing exists
     const listing = await Listing.findByPk(listingId);
     if (!listing) {
       return res.status(404).json({ error: 'Listing not found' });
     }
 
-    // Sort user IDs to maintain consistency
     const [user1Id, user2Id] = [currentUserId, userId].sort();
 
-    // Find or create conversation
     let conversation = await Conversation.findOne({
-      where: {
-        user1Id,
-        user2Id,
-        listingId
-      },
+      where: { user1Id, user2Id, listingId },
       include: [
-        {
-          model: User,
-          as: 'user1',
-          attributes: ['id', 'fullName', 'avatar']
-        },
-        {
-          model: User,
-          as: 'user2',
-          attributes: ['id', 'fullName', 'avatar']
-        },
-        {
-          model: Listing,
-          as: 'listing',
-          attributes: ['id', 'title', 'price', 'images']
-        }
+        { model: User, as: 'user1', attributes: ['id', 'fullName', 'avatar'] },
+        { model: User, as: 'user2', attributes: ['id', 'fullName', 'avatar'] },
+        { model: Listing, as: 'listing', attributes: ['id', 'title', 'price', 'images'] }
       ]
     });
+
+    const isNewConversation = !conversation;
 
     if (!conversation) {
       conversation = await Conversation.create({
@@ -53,29 +38,24 @@ const getOrCreateConversation = async (req, res) => {
         listingId
       });
 
-      // Fetch with includes
       conversation = await Conversation.findByPk(conversation.id, {
         include: [
-          {
-            model: User,
-            as: 'user1',
-            attributes: ['id', 'fullName', 'avatar']
-          },
-          {
-            model: User,
-            as: 'user2',
-            attributes: ['id', 'fullName', 'avatar']
-          },
-          {
-            model: Listing,
-            as: 'listing',
-            attributes: ['id', 'title', 'price', 'images']
-          }
+          { model: User, as: 'user1', attributes: ['id', 'fullName', 'avatar'] },
+          { model: User, as: 'user2', attributes: ['id', 'fullName', 'avatar'] },
+          { model: Listing, as: 'listing', attributes: ['id', 'title', 'price', 'images'] }
         ]
       });
+
+      // 🆕 Send notification to seller about new offer
+      if (listing.userId !== currentUserId) {
+        await sendNotification(listing.userId, NOTIFICATION_TYPES.NEW_OFFER, {
+          listingTitle: listing.title,
+          listingId: listing.id,
+          conversationId: conversation.id
+        });
+      }
     }
 
-    // Get other user
     const otherUser = conversation.user1Id === currentUserId 
       ? conversation.user2 
       : conversation.user1;
@@ -92,7 +72,6 @@ const getOrCreateConversation = async (req, res) => {
     res.status(500).json({ error: 'Failed to get conversation' });
   }
 };
-
 // Get user's conversations
 const getConversations = async (req, res) => {
   try {
@@ -260,6 +239,8 @@ const sendMessage = async (conversationId, senderId, receiverId, messageText) =>
     throw error;
   }
 };
+
+
 
 module.exports = {
   getOrCreateConversation,

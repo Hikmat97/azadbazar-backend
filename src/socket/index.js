@@ -1,5 +1,7 @@
+
 const { verifyFirebaseToken } = require('../config/firebase-verify');
 const { sendMessage } = require('../controllers/chatController');
+const { sendPushNotification } = require('../controllers/notificationController');
 const { User } = require('../models');
 
 const connectedUsers = new Map(); // userId -> socketId
@@ -36,25 +38,20 @@ const setupSocket = (io) => {
   io.on('connection', (socket) => {
     console.log('✅ User connected:', socket.userId);
     
-    // Store user connection
     connectedUsers.set(socket.userId, socket.id);
-    
-    // Notify user is online
     io.emit('user-online', { userId: socket.userId });
 
-    // Join conversation room
     socket.on('join-conversation', (conversationId) => {
       socket.join(`conversation:${conversationId}`);
       console.log(`User ${socket.userId} joined conversation ${conversationId}`);
     });
 
-    // Leave conversation room
     socket.on('leave-conversation', (conversationId) => {
       socket.leave(`conversation:${conversationId}`);
       console.log(`User ${socket.userId} left conversation ${conversationId}`);
     });
 
-    // Send message
+    // Send message with push notification
     socket.on('send-message', async (data) => {
       try {
         const { conversationId, receiverId, message } = data;
@@ -76,8 +73,32 @@ const setupSocket = (io) => {
         // Emit to conversation room
         io.to(`conversation:${conversationId}`).emit('new-message', newMessage);
 
-        // Send notification to receiver if online
         const receiverSocketId = connectedUsers.get(receiverId);
+        
+        // Send push notification if receiver is offline or not in chat room
+        const receiverInRoom = io.sockets.adapter.rooms.get(`conversation:${conversationId}`)?.has(receiverSocketId);
+        
+        if (!receiverSocketId || !receiverInRoom) {
+          console.log('📲 Sending push notification to offline/away user');
+          
+          try {
+            await sendPushNotification(
+              receiverId,
+              socket.user.fullName,
+              message,
+              {
+                type: 'message',
+                conversationId,
+                senderId: socket.userId,
+                senderName: socket.user.fullName
+              }
+            );
+          } catch (notifError) {
+            console.error('❌ Push notification error:', notifError);
+          }
+        }
+
+        // Send notification event to receiver if online
         if (receiverSocketId) {
           io.to(receiverSocketId).emit('message-notification', {
             conversationId,
@@ -85,13 +106,15 @@ const setupSocket = (io) => {
           });
         }
 
-        // Send success to sender
         socket.emit('message-sent', { success: true, message: newMessage });
       } catch (error) {
         console.error('Send message error:', error);
         socket.emit('message-error', { error: 'Failed to send message' });
       }
     });
+
+
+
 
     // Typing indicator
     socket.on('typing', (data) => {
@@ -105,6 +128,8 @@ const setupSocket = (io) => {
         });
       }
     });
+
+
 
     // Stop typing
     socket.on('stop-typing', (data) => {
