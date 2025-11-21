@@ -1,15 +1,15 @@
 {
   "name": "azadbazar-backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "azadbazar-backend",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["marketplace", "api", "nodejs"],
+  "author": "Your Name",
+  "license": "MIT",
   "dependencies": {
     "@elastic/elasticsearch": "^8.19.1",
     "@react-native-async-storage/async-storage": "^2.2.0",

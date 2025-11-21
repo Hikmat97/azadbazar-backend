@@ -1,19 +1,26 @@
-
-
 const { sequelize } = require('./database');
 const { User, Category, Listing, Favorite } = require('../models');
 
 const syncDatabase = async () => {
   try {
-    // Sync all models
-    await sequelize.sync({ alter: true }); // Use alter in development
-    console.log('✅ Database synced successfully');
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    if (isProduction) {
+      // In production, only sync without altering existing tables
+      await sequelize.sync({ alter: false });
+      console.log('✅ Database synced (production mode - no alterations)');
+    } else {
+      // In development, allow alterations
+      await sequelize.sync({ alter: true });
+      console.log('✅ Database synced (development mode - with alterations)');
+    }
     
     // Seed categories if empty
     await seedCategories();
     
   } catch (error) {
     console.error('❌ Database sync failed:', error);
+    throw error;
   }
 };
 
@@ -41,6 +48,8 @@ const seedCategories = async () => {
       
       await Category.bulkCreate(categories);
       console.log('✅ Categories seeded successfully');
+    } else {
+      console.log('ℹ️ Categories already exist, skipping seed');
     }
   } catch (error) {
     console.error('❌ Category seeding failed:', error);

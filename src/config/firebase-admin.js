@@ -4,12 +4,20 @@ const path = require('path');
 let firebaseApp;
 
 try {
-  // Check if already initialized
   if (admin.apps.length === 0) {
-    const serviceAccountPath = path.join(__dirname, '../../serviceAccountKey.json');
-    const serviceAccount = require(serviceAccountPath);
+    let serviceAccount;
     
-    console.log('📄 Service account loaded');
+    // In production, read from environment variable
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      console.log('📄 Loading Firebase config from environment variable');
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } else {
+      // In development, read from file
+      console.log('📄 Loading Firebase config from file');
+      const serviceAccountPath = path.join(__dirname, '../../serviceAccountKey.json');
+      serviceAccount = require(serviceAccountPath);
+    }
+    
     console.log('📧 Service account email:', serviceAccount.client_email);
     console.log('🆔 Project ID:', serviceAccount.project_id);
     
@@ -27,22 +35,23 @@ try {
   console.error('❌ Firebase Admin initialization failed:');
   console.error('Error message:', error.message);
   console.error('Error stack:', error.stack);
-  process.exit(1); // Stop server if Firebase fails
+  
+  // In production, this is critical - exit process
+  if (process.env.NODE_ENV === 'production') {
+    console.error('🚨 Cannot start server without Firebase - exiting');
+    process.exit(1);
+  }
 }
 
 const verifyFirebaseToken = async (token) => {
   try {
     console.log('🔐 Verifying Firebase token...');
-    console.log('Token length:', token.length);
-    console.log('Token starts with:', token.substring(0, 30) + '...');
     
     const decodedToken = await admin.auth().verifyIdToken(token, true);
     
     console.log('✅ Token verified successfully!');
     console.log('User ID:', decodedToken.uid);
     console.log('Email:', decodedToken.email);
-    console.log('Token issued at:', new Date(decodedToken.iat * 1000));
-    console.log('Token expires at:', new Date(decodedToken.exp * 1000));
     
     return decodedToken;
   } catch (error) {

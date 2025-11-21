@@ -1,0 +1,41 @@
+services:
+  # Web Service
+  - type: web
+    name: azdbzr-api
+    env: node
+    region: frankfurt # or your preferred region
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_HOST
+        fromDatabase:
+          name: azdbzr-db
+          property: host
+      - key: DB_NAME
+        fromDatabase:
+          name: azdbzr-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: azdbzr-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: azdbzr-db
+          property: password
+      - key: DB_PORT
+        fromDatabase:
+          name: azdbzr-db
+          property: port
+
+# Database
+databases:
+  - name: azdbzr-db
+    databaseName: azdbzr
+    user: azdbzr
+    plan: free
+    region: frankfurt
